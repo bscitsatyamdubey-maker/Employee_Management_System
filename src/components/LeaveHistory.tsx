@@ -1,3 +1,4 @@
+// src/components/LeaveHistory.tsx
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
 import { useEmployee, LeaveRequest } from './EmployeeContext';
@@ -15,7 +16,8 @@ import {
   Eye,
   Filter,
   Download,
-  FileText
+  FileText,
+  UserCheck
 } from 'lucide-react';
 
 export const LeaveHistory: React.FC = () => {
@@ -47,11 +49,18 @@ export const LeaveHistory: React.FC = () => {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'pending':
+      case 'pending_hod':
+        return (
+          <Badge variant="outline" className="text-yellow-600 border-yellow-200">
+            <Clock className="w-3 h-3 mr-1" />
+            Pending HOD
+          </Badge>
+        );
+      case 'pending_admin':
         return (
           <Badge variant="outline" className="text-orange-600 border-orange-200">
             <Clock className="w-3 h-3 mr-1" />
-            Pending
+            Pending Admin
           </Badge>
         );
       case 'approved':
@@ -78,7 +87,9 @@ export const LeaveHistory: React.FC = () => {
       'Sick': 'bg-red-100 text-red-800',
       'Vacation': 'bg-blue-100 text-blue-800',
       'Personal': 'bg-purple-100 text-purple-800',
-      'Emergency': 'bg-orange-100 text-orange-800'
+      'Emergency': 'bg-orange-100 text-orange-800',
+      'Paternity': 'bg-blue-100 text-blue-800',
+      'leave on compassionate grounds': 'bg-red-100 text-red-800'
     };
     
     return (
@@ -91,7 +102,7 @@ export const LeaveHistory: React.FC = () => {
   // Calculate statistics
   const totalRequests = userLeaveRequests.length;
   const approvedRequests = userLeaveRequests.filter(req => req.status === 'approved').length;
-  const pendingRequests = userLeaveRequests.filter(req => req.status === 'pending').length;
+  const pendingRequestsCount = userLeaveRequests.filter(req => req.status === 'pending_hod' || req.status === 'pending_admin').length;
   const rejectedRequests = userLeaveRequests.filter(req => req.status === 'rejected').length;
   const totalDaysUsed = userLeaveRequests
     .filter(req => req.status === 'approved')
@@ -99,7 +110,7 @@ export const LeaveHistory: React.FC = () => {
 
   const exportToCSV = () => {
     const csvContent = [
-      ['Date Submitted', 'Leave Type', 'Start Date', 'End Date', 'Days', 'Status', 'Reason', 'Reviewed By', 'Reviewed Date'].join(','),
+      ['Date Submitted', 'Leave Type', 'Start Date', 'End Date', 'Days', 'Status', 'Reason', 'HOD Reviewed By', 'HOD Reviewed Date', 'Admin Reviewed By', 'Admin Reviewed Date'].join(','),
       ...sortedRequests.map(request => [
         new Date(request.created_at).toLocaleDateString(),
         request.leave_type,
@@ -108,6 +119,8 @@ export const LeaveHistory: React.FC = () => {
         request.days_requested,
         request.status,
         `"${request.reason}"`,
+        request.hod_reviewed_by || '',
+        request.hod_reviewed_at ? new Date(request.hod_reviewed_at).toLocaleDateString() : '',
         request.reviewed_by || '',
         request.reviewed_at ? new Date(request.reviewed_at).toLocaleDateString() : ''
       ].join(','))
@@ -155,7 +168,7 @@ export const LeaveHistory: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Pending</p>
-                <p className="text-2xl font-bold text-orange-600">{pendingRequests}</p>
+                <p className="text-2xl font-bold text-orange-600">{pendingRequestsCount}</p>
               </div>
               <Clock className="w-6 h-6 text-orange-600" />
             </div>
@@ -200,27 +213,30 @@ export const LeaveHistory: React.FC = () => {
             </div>
             
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[160px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="pending_hod">Pending HOD</SelectItem>
+                <SelectItem value="pending_admin">Pending Admin</SelectItem>
                 <SelectItem value="approved">Approved</SelectItem>
                 <SelectItem value="rejected">Rejected</SelectItem>
               </SelectContent>
             </Select>
 
             <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[240px]">
                 <SelectValue placeholder="Type" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="Vacation">Vacation</SelectItem>
+                <SelectItem value="Vacation">PL</SelectItem>
                 <SelectItem value="Sick">Sick Leave</SelectItem>
-                <SelectItem value="Personal">Personal</SelectItem>
-                <SelectItem value="Emergency">Emergency</SelectItem>
+                <SelectItem value="Personal">Casual</SelectItem>
+                <SelectItem value="Emergency">Maternity</SelectItem>
+                <SelectItem value="Paternity">Paternity</SelectItem>
+                <SelectItem value="leave on compassionate grounds">Leave on Compassionate Grounds</SelectItem>
               </SelectContent>
             </Select>
 
@@ -287,7 +303,12 @@ export const LeaveHistory: React.FC = () => {
                         {request.reviewed_at ? (
                           <div className="text-sm">
                             <div>{new Date(request.reviewed_at).toLocaleDateString()}</div>
-                            <div className="text-gray-500">{request.reviewed_by}</div>
+                            <div className="text-gray-500">{request.reviewed_by} (Admin)</div>
+                          </div>
+                        ) : request.hod_reviewed_at ? (
+                          <div className="text-sm">
+                            <div>{new Date(request.hod_reviewed_at).toLocaleDateString()}</div>
+                            <div className="text-gray-500">{request.hod_reviewed_by} (HOD)</div>
                           </div>
                         ) : (
                           <span className="text-sm text-gray-400">Pending</span>
@@ -364,27 +385,42 @@ export const LeaveHistory: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Submitted On</Label>
-                  <div className="text-sm text-gray-600">
-                    {new Date(selectedRequest.created_at).toLocaleString()}
+              <div className="space-y-2">
+                <Label>Submitted On</Label>
+                <div className="text-sm text-gray-600">
+                  {new Date(selectedRequest.created_at).toLocaleString()}
+                </div>
+              </div>
+
+              {/* HOD Review Status */}
+              {selectedRequest.hod_reviewed_at && (
+                 <div className="space-y-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                  <Label>HOD Review</Label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center space-x-2">
+                      <UserCheck className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm text-gray-600">{selectedRequest.hod_reviewed_by}</span>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {new Date(selectedRequest.hod_reviewed_at).toLocaleString()}
+                    </div>
                   </div>
                 </div>
-                {selectedRequest.reviewed_at && (
-                  <div className="space-y-2">
-                    <Label>Reviewed On</Label>
+              )}
+
+              {/* Admin Review Status */}
+              {selectedRequest.reviewed_at && (
+                <div className="space-y-2 p-3 bg-gray-50 border border-gray-200 rounded-md">
+                  <Label>Admin Review</Label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="flex items-center space-x-2">
+                      <UserCheck className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm text-gray-600">{selectedRequest.reviewed_by}</span>
+                    </div>
                     <div className="text-sm text-gray-600">
                       {new Date(selectedRequest.reviewed_at).toLocaleString()}
                     </div>
                   </div>
-                )}
-              </div>
-
-              {selectedRequest.reviewed_by && (
-                <div className="space-y-2">
-                  <Label>Reviewed By</Label>
-                  <div className="text-sm text-gray-600">{selectedRequest.reviewed_by}</div>
                 </div>
               )}
 

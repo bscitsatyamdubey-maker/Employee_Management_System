@@ -1,16 +1,18 @@
+// src/components/EmployeeContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { supabase } from '../utils/supabase/client';
 
+// *** FIXED Employee interface ***
 export interface Employee {
   id: string;
   email: string;
   name: string;
-  department: string;
-  role: 'admin' | 'employee';
-  hire_date: string;
-  leave_balance: number;
+  role: 'admin' | 'employee' | 'hod';
+  department?: string;
+  hire_date?: string;
+  leave_balance?: number;
   created_at: string;
 }
 
@@ -18,15 +20,18 @@ export interface LeaveRequest {
   id: string;
   employee_id: string;
   employee_name: string;
-  leave_type: 'Sick' | 'Vacation' | 'Personal' | 'Emergency';
+  department: string;
+  leave_type: 'Sick' | 'Vacation' | 'Personal' | 'Emergency' | 'Paternity' | 'leave on compassionate grounds';
   start_date: string;
   end_date: string;
   days_requested: number;
   reason: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending_hod' | 'pending_admin' | 'approved' | 'rejected';
   created_at: string;
   reviewed_at?: string;
   reviewed_by?: string;
+  hod_reviewed_by?: string;
+  hod_reviewed_at?: string;
 }
 
 export interface Holiday {
@@ -42,16 +47,13 @@ interface EmployeeContextType {
   leaveRequests: LeaveRequest[];
   holidays: Holiday[];
   loading: boolean;
-  // Employee functions
   fetchEmployees: () => Promise<void>;
   addEmployee: (employee: Omit<Employee, 'id' | 'created_at'>) => Promise<{ success: boolean; error?: string }>;
   updateEmployee: (id: string, updates: Partial<Employee>) => Promise<{ success: boolean; error?: string }>;
   deleteEmployee: (id: string) => Promise<{ success: boolean; error?: string }>;
-  // Leave request functions
   fetchLeaveRequests: () => Promise<void>;
-  submitLeaveRequest: (request: Omit<LeaveRequest, 'id' | 'created_at' | 'employee_name'>) => Promise<{ success: boolean; error?: string }>;
+  submitLeaveRequest: (request: Omit<LeaveRequest, 'id' | 'created_at' | 'employee_name' | 'department' | 'status' | 'employee_id'>) => Promise<{ success: boolean; error?: string }>;
   updateLeaveRequestStatus: (id: string, status: 'approved' | 'rejected') => Promise<{ success: boolean; error?: string }>;
-  // Holiday functions
   fetchHolidays: () => Promise<void>;
   addHoliday: (holiday: Omit<Holiday, 'id' | 'created_at'>) => Promise<{ success: boolean; error?: string }>;
   deleteHoliday: (id: string) => Promise<{ success: boolean; error?: string }>;
@@ -68,7 +70,7 @@ export const useEmployee = () => {
 };
 
 export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, checkUser } = useAuth() as any; // Using checkUser from AuthContext
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [holidays, setHolidays] = useState<Holiday[]>([]);
@@ -76,9 +78,17 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     if (user) {
-      fetchEmployees();
-      fetchLeaveRequests();
-      fetchHolidays();
+      setLoading(true);
+      Promise.all([
+        fetchEmployees(),
+        fetchLeaveRequests(),
+        fetchHolidays()
+      ]).finally(() => setLoading(false));
+    } else {
+      setEmployees([]);
+      setLeaveRequests([]);
+      setHolidays([]);
+      setLoading(false);
     }
   }, [user]);
 
@@ -91,8 +101,11 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const fetchEmployees = async () => {
+    if (!user || user.role === 'employee') {
+      setEmployees([]);
+      return;
+    }
     try {
-      setLoading(true);
       const headers = await getAuthHeaders();
       const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-ea915b54/employees`, {
         headers
@@ -101,11 +114,12 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (response.ok) {
         const data = await response.json();
         setEmployees(data);
+      } else {
+        setEmployees([]);
       }
     } catch (error) {
       console.error('Error fetching employees:', error);
-    } finally {
-      setLoading(false);
+      setEmployees([]);
     }
   };
 
@@ -142,6 +156,7 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       if (response.ok) {
         await fetchEmployees();
+        await checkUser(); // Re-fetch current user data if they updated themselves
         return { success: true };
       } else {
         const error = await response.json();
@@ -187,10 +202,13 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     } catch (error) {
       console.error('Error fetching leave requests:', error);
+      setLeaveRequests([]);
     }
   };
 
-  const submitLeaveRequest = async (request: Omit<LeaveRequest, 'id' | 'created_at' | 'employee_name'>) => {
+  const submitLeaveRequest = async (request: Omit<LeaveRequest, 'id' | 'created_at' | 'employee_name' | 'department' | 'status' | 'employee_id'>) => {
+    if (!user) return { success: false, error: 'Not authenticated' };
+
     try {
       const headers = await getAuthHeaders();
       const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-ea915b54/leave-requests`, {
@@ -201,6 +219,7 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       if (response.ok) {
         await fetchLeaveRequests();
+        await checkUser(); // Re-fetch user to update their leave balance
         return { success: true };
       } else {
         const error = await response.json();
@@ -223,7 +242,8 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       if (response.ok) {
         await fetchLeaveRequests();
-        await fetchEmployees(); // Refresh to update leave balances
+        await checkUser(); // Re-fetch current user (HOD/Admin)
+        await fetchEmployees(); // Re-fetch employee list to update balances for Admin view
         return { success: true };
       } else {
         const error = await response.json();
@@ -248,6 +268,7 @@ export const EmployeeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     } catch (error) {
       console.error('Error fetching holidays:', error);
+      setHolidays([]);
     }
   };
 

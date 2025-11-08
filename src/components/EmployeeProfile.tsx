@@ -1,3 +1,4 @@
+// src/components/EmployeeProfile.tsx
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
 import { Button } from './ui/button';
@@ -7,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Badge } from './ui/badge';
 import { toast } from 'sonner@2.0.3';
 import { User, Mail, Building, Calendar, Save, Edit } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { DEPARTMENTS } from '../constants'; // Import departments
 
 export const EmployeeProfile: React.FC = () => {
   const { user, updateProfile } = useAuth();
@@ -19,6 +22,18 @@ export const EmployeeProfile: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
 
+  // Update form data if user context changes
+  React.useEffect(() => {
+    if (user) {
+      setFormData({
+        name: user.name || '',
+        email: user.email || '',
+        department: user.department || '',
+        hire_date: user.hire_date || ''
+      });
+    }
+  }, [user]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
       ...formData,
@@ -26,10 +41,20 @@ export const EmployeeProfile: React.FC = () => {
     });
   };
 
+  const handleDepartmentChange = (value: string) => {
+    setFormData({
+      ...formData,
+      department: value
+    });
+  };
+
   const handleSave = async () => {
     setLoading(true);
     
-    const result = await updateProfile(formData);
+    // Only send fields that can be updated
+    // Email is used for login and role is controlled by admin, so we don't update them here.
+    const { name, department, hire_date } = formData;
+    const result = await updateProfile({ name, department, hire_date });
     
     if (result.success) {
       toast.success('Profile updated successfully');
@@ -119,26 +144,18 @@ export const EmployeeProfile: React.FC = () => {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  {isEditing ? (
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={handleChange}
-                        className="pl-10"
-                        placeholder="Enter your email address"
-                      />
-                    </div>
-                  ) : (
-                    <div className="flex items-center space-x-2">
-                      <Mail className="w-4 h-4 text-gray-400" />
-                      <span className="text-gray-900">{user.email}</span>
-                    </div>
-                  )}
+                  <Label htmlFor="email">Email Address (Cannot be changed)</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={formData.email}
+                      className="pl-10"
+                      disabled
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -146,17 +163,16 @@ export const EmployeeProfile: React.FC = () => {
                 <div className="space-y-2">
                   <Label htmlFor="department">Department</Label>
                   {isEditing ? (
-                    <div className="relative">
-                      <Building className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                      <Input
-                        id="department"
-                        name="department"
-                        value={formData.department}
-                        onChange={handleChange}
-                        className="pl-10"
-                        placeholder="Enter your department"
-                      />
-                    </div>
+                    <Select value={formData.department} onValueChange={handleDepartmentChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select your department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DEPARTMENTS.map(dept => (
+                          <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <div className="flex items-center space-x-2">
                       <Building className="w-4 h-4 text-gray-400" />
@@ -205,8 +221,8 @@ export const EmployeeProfile: React.FC = () => {
             <div className="space-y-2">
               <Label>Role</Label>
               <div className="flex items-center space-x-2">
-                <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
-                  {user.role === 'admin' ? 'Administrator' : 'Employee'}
+                <Badge variant={user.role === 'admin' ? 'default' : (user.role === 'hod' ? 'secondary' : 'outline')}>
+                  {user.role === 'admin' ? 'Administrator' : (user.role === 'hod' ? 'HOD' : 'Employee')}
                 </Badge>
               </div>
             </div>
@@ -214,8 +230,8 @@ export const EmployeeProfile: React.FC = () => {
             <div className="space-y-2">
               <Label>Leave Balance</Label>
               <div className="flex items-center space-x-2">
-                <Badge variant={user.leave_balance && user.leave_balance <= 5 ? 'destructive' : 'outline'}>
-                  {user.leave_balance || 0} days remaining
+                <Badge variant={user.leave_balance != null && user.leave_balance <= 5 ? 'destructive' : 'outline'}>
+                  {user.leave_balance ?? 'N/A'} days remaining
                 </Badge>
               </div>
             </div>
@@ -234,9 +250,14 @@ export const EmployeeProfile: React.FC = () => {
                       {(() => {
                         const today = new Date();
                         const hireDate = new Date(user.hire_date);
-                        const years = today.getFullYear() - hireDate.getFullYear();
-                        const months = today.getMonth() - hireDate.getMonth();
+                        let years = today.getFullYear() - hireDate.getFullYear();
+                        let months = today.getMonth() - hireDate.getMonth();
                         
+                        if (months < 0 || (months === 0 && today.getDate() < hireDate.getDate())) {
+                          years--;
+                          months += 12;
+                        }
+
                         if (years > 0) {
                           return `${years} year${years > 1 ? 's' : ''} with company`;
                         } else if (months > 0) {

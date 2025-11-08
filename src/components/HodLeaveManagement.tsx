@@ -1,8 +1,9 @@
 "use client"
 
-// src/components/LeaveRequestManagement.tsx
+// src/components/HodLeaveManagement.tsx
 import type React from "react"
 import { useState } from "react"
+import { useAuth } from "./AuthContext"
 import { useEmployee, type LeaveRequest } from "./EmployeeContext"
 import { Button } from "./ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card"
@@ -13,26 +14,31 @@ import { toast } from "sonner@2.0.3"
 import { CheckCircle, XCircle, Clock, Calendar, User, FileText, Eye, UserCheck } from "lucide-react"
 import { NotificationModal } from "./NotificationModal"
 
-export const LeaveRequestManagement: React.FC = () => {
+export const HodLeaveManagement: React.FC = () => {
+  const { user } = useAuth()
   const { leaveRequests, loading, updateLeaveRequestStatus } = useEmployee()
+
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
   const [notificationData, setNotificationData] = useState<{
     show: boolean
-    type: "approved" | "rejected"
+    type: "approved" | "rejected" | "forwarded"
     employeeName: string
     leaveType: string
     dates: string
   }>({ show: false, type: "approved", employeeName: "", leaveType: "", dates: "" })
 
+  // Filter requests for HOD's department
+  const departmentRequests = leaveRequests.filter((req) => req.department === user?.department)
+
   const handleApprove = async (request: LeaveRequest) => {
-    // Admin approval - final step
+    // HOD approval sends to admin queue (not final approval)
     const result = await updateLeaveRequestStatus(request.id, "approved")
     if (result.success) {
-      toast.success("Leave request approved and employee leave balance deducted")
+      toast.success("Leave request approved and forwarded to Admin for final approval")
       setNotificationData({
         show: true,
-        type: "approved",
+        type: "forwarded",
         employeeName: request.employee_name,
         leaveType: request.leave_type,
         dates: `${request.start_date} to ${request.end_date}`,
@@ -43,7 +49,7 @@ export const LeaveRequestManagement: React.FC = () => {
   }
 
   const handleReject = async (request: LeaveRequest) => {
-    // Admin rejection
+    // HOD rejection
     const result = await updateLeaveRequestStatus(request.id, "rejected")
     if (result.success) {
       toast.success("Leave request rejected")
@@ -68,7 +74,7 @@ export const LeaveRequestManagement: React.FC = () => {
     switch (status) {
       case "pending_hod":
         return (
-          <Badge variant="outline" className="text-yellow-600 border-yellow-200">
+          <Badge variant="outline" className="text-orange-600 border-orange-200">
             <Clock className="w-3 h-3 mr-1" />
             Pending HOD
           </Badge>
@@ -76,15 +82,15 @@ export const LeaveRequestManagement: React.FC = () => {
       // *** ADDED THIS CASE ***
       case "pending":
         return (
-          <Badge variant="outline" className="text-yellow-600 border-yellow-200">
+          <Badge variant="outline" className="text-orange-600 border-orange-200">
             <Clock className="w-3 h-3 mr-1" />
-            Pending (Stale)
+            Pending HOD
           </Badge>
         )
       case "pending_admin":
         return (
-          <Badge variant="outline" className="text-orange-600 border-orange-200">
-            <Clock className="w-3 h-3 mr-1" />
+          <Badge variant="outline" className="text-blue-600 border-blue-200">
+            <UserCheck className="w-3 h-3 mr-1" />
             Pending Admin
           </Badge>
         )
@@ -124,23 +130,9 @@ export const LeaveRequestManagement: React.FC = () => {
     )
   }
 
-  // *** UPDATED THIS FILTER ***
-  const pendingRequests = leaveRequests.filter(
-    (req) => req.status === "pending_admin" || req.status === "pending"
-  )
-
-  // Also include HOD pending requests for the "All Requests" table, so admin can see them
-  const allRequestsSorted = [...leaveRequests].sort((a, b) => {
-    const statusPriority = (status: string) => {
-      if (status === "pending_admin") return 1
-      if (status === "pending_hod" || status === "pending") return 2 // Group old "pending" with "pending_hod"
-      return 3
-    }
-    if (statusPriority(a.status) !== statusPriority(b.status)) {
-      return statusPriority(a.status) - statusPriority(b.status)
-    }
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  })
+  // *** THIS IS THE FIX ***
+  // HOD's "Pending" tab now shows "pending_hod" AND stale "pending"
+  const pendingRequests = departmentRequests.filter((req) => req.status === "pending_hod" || req.status === "pending")
 
   return (
     <div className="space-y-6">
@@ -149,12 +141,12 @@ export const LeaveRequestManagement: React.FC = () => {
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <Clock className="w-5 h-5 text-orange-600" />
-            <span>Pending Admin Approval</span>
+            <span>Pending HOD Approval</span>
             <Badge variant="outline" className="text-orange-600 border-orange-200">
               {pendingRequests.length}
             </Badge>
           </CardTitle>
-          <CardDescription>Review and give final approval or reject leave requests</CardDescription>
+          <CardDescription>Review and approve or reject leave requests from your department</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -164,7 +156,7 @@ export const LeaveRequestManagement: React.FC = () => {
           ) : pendingRequests.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <Clock className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-              <p>No leave requests pending admin approval</p>
+              <p>No pending leave requests for your department</p>
               <p className="text-sm">All caught up!</p>
             </div>
           ) : (
@@ -174,9 +166,7 @@ export const LeaveRequestManagement: React.FC = () => {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-3 mb-2">
-                        <h3 className="font-medium text-gray-900">
-                          {request.employee_name} ({request.department})
-                        </h3>
+                        <h3 className="font-medium text-gray-900">{request.employee_name}</h3>
                         {getLeaveTypeBadge(request.leave_type)}
                         {getStatusBadge(request.status)}
                       </div>
@@ -196,12 +186,7 @@ export const LeaveRequestManagement: React.FC = () => {
                           <span className="truncate">{request.reason}</span>
                         </div>
                       </div>
-                      {/* Only show HOD approval if it exists */}
-                      {request.hod_reviewed_by && (
-                        <p className="text-xs text-blue-600 mt-2">Approved by HOD: {request.hod_reviewed_by}</p>
-                      )}
                     </div>
-                    {/* *** UPDATED THIS BLOCK TO ADD BUTTONS *** */}
                     <div className="flex items-center space-x-2 ml-4">
                       <Button variant="outline" size="sm" onClick={() => openDetailDialog(request)}>
                         <Eye className="w-4 h-4" />
@@ -236,8 +221,8 @@ export const LeaveRequestManagement: React.FC = () => {
       {/* All Leave Requests */}
       <Card>
         <CardHeader>
-          <CardTitle>All Leave Requests</CardTitle>
-          <CardDescription>Complete history of all leave requests and their status</CardDescription>
+          <CardTitle>All Leave Requests (Your Department)</CardTitle>
+          <CardDescription>Complete history of leave requests from {user?.department}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="rounded-md border">
@@ -245,39 +230,41 @@ export const LeaveRequestManagement: React.FC = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Employee</TableHead>
-                  <TableHead>Department</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Dates</TableHead>
                   <TableHead>Days</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Submitted</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {leaveRequests.length === 0 ? (
+                {departmentRequests.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                      No leave requests found
+                      No leave requests found for your department
                     </TableCell>
                   </TableRow>
                 ) : (
-                  allRequestsSorted.map((request) => (
-                    <TableRow key={request.id}>
-                      <TableCell className="font-medium">{request.employee_name}</TableCell>
-                      <TableCell>{request.department}</TableCell>
-                      <TableCell>{getLeaveTypeBadge(request.leave_type)}</TableCell>
-                      <TableCell>
-                        {request.start_date} to {request.end_date}
-                      </TableCell>
-                      <TableCell>{request.days_requested} days</TableCell>
-                      <TableCell>{getStatusBadge(request.status)}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="outline" size="sm" onClick={() => openDetailDialog(request)}>
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  departmentRequests
+                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) // Sort by newest first
+                    .map((request) => (
+                      <TableRow key={request.id}>
+                        <TableCell className="font-medium">{request.employee_name}</TableCell>
+                        <TableCell>{getLeaveTypeBadge(request.leave_type)}</TableCell>
+                        <TableCell>
+                          {request.start_date} to {request.end_date}
+                        </TableCell>
+                        <TableCell>{request.days_requested}</TableCell>
+                        <TableCell>{getStatusBadge(request.status)}</TableCell>
+                        <TableCell>{new Date(request.created_at).toLocaleDateString()}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm" onClick={() => openDetailDialog(request)}>
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
                 )}
               </TableBody>
             </Table>
@@ -299,9 +286,7 @@ export const LeaveRequestManagement: React.FC = () => {
                   <Label>Employee</Label>
                   <div className="flex items-center space-x-2">
                     <User className="w-4 h-4 text-gray-400" />
-                    <span>
-                      {selectedRequest.employee_name} ({selectedRequest.department})
-                    </span>
+                    <span>{selectedRequest.employee_name}</span>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -341,28 +326,17 @@ export const LeaveRequestManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <div>{getStatusBadge(selectedRequest.status)}</div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <div>{getStatusBadge(selectedRequest.status)}</div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Submitted On</Label>
+                  <div className="text-sm text-gray-600">{new Date(selectedRequest.created_at).toLocaleString()}</div>
+                </div>
               </div>
 
-              {/* HOD Review Status */}
-              {selectedRequest.hod_reviewed_at && (
-                <div className="space-y-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                  <Label>HOD Review</Label>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex items-center space-x-2">
-                      <UserCheck className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm text-gray-600">{selectedRequest.hod_reviewed_by}</span>
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      {new Date(selectedRequest.hod_reviewed_at).toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Admin Review Status */}
               {selectedRequest.reviewed_at && (
                 <div className="space-y-2 p-3 bg-gray-50 border border-gray-200 rounded-md">
                   <Label>Admin Review</Label>
@@ -378,8 +352,10 @@ export const LeaveRequestManagement: React.FC = () => {
                 </div>
               )}
 
-              {/* Admin action buttons */}
-              {(selectedRequest.status === "pending_admin" || selectedRequest.status === "pending_hod" || selectedRequest.status === "pending") && (
+              {/* *** THIS IS THE FIX ***
+                Show buttons if status is "pending_hod" OR stale "pending"
+              */}
+              {(selectedRequest.status === "pending_hod" || selectedRequest.status === "pending") && (
                 <div className="flex justify-end space-x-2 pt-4 border-t">
                   <Button
                     variant="outline"
@@ -400,7 +376,7 @@ export const LeaveRequestManagement: React.FC = () => {
                     className="bg-green-600 hover:bg-green-700"
                   >
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    {selectedRequest.status === "pending_hod" ? "Approve (Override HOD)" : "Approve"}
+                    Approve
                   </Button>
                 </div>
               )}

@@ -12,76 +12,171 @@ CREATE TABLE kv_store_ea915b54 (
 // This file provides a simple key-value interface for storing Figma Make data. It should be adequate for most small-scale use cases.
 import { createClient } from "jsr:@supabase/supabase-js@2.49.8";
 
-const client = () => createClient(
-  Deno.env.get("SUPABASE_URL"),
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
-);
+/* ===========================================
+   Internal: single client instance
+   =========================================== */
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing in env");
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+/* ===========================================
+   Original API (unchanged)
+   =========================================== */
 
 // Set stores a key-value pair in the database.
 export const set = async (key: string, value: any): Promise<void> => {
-  const supabase = client()
-  const { error } = await supabase.from("kv_store_ea915b54").upsert({
-    key,
-    value
-  });
-  if (error) {
-    throw new Error(error.message);
-  }
+  const { error } = await supabase.from("kv_store_ea915b54").upsert({ key, value });
+  if (error) throw new Error(error.message);
 };
 
 // Get retrieves a key-value pair from the database.
 export const get = async (key: string): Promise<any> => {
-  const supabase = client()
-  const { data, error } = await supabase.from("kv_store_ea915b54").select("value").eq("key", key).maybeSingle();
-  if (error) {
-    throw new Error(error.message);
-  }
+  const { data, error } = await supabase
+    .from("kv_store_ea915b54")
+    .select("value")
+    .eq("key", key)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
   return data?.value;
 };
 
 // Delete deletes a key-value pair from the database.
 export const del = async (key: string): Promise<void> => {
-  const supabase = client()
   const { error } = await supabase.from("kv_store_ea915b54").delete().eq("key", key);
-  if (error) {
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
 };
 
 // Sets multiple key-value pairs in the database.
 export const mset = async (keys: string[], values: any[]): Promise<void> => {
-  const supabase = client()
-  const { error } = await supabase.from("kv_store_ea915b54").upsert(keys.map((k, i) => ({ key: k, value: values[i] })));
-  if (error) {
-    throw new Error(error.message);
-  }
+  const rows = keys.map((k, i) => ({ key: k, value: values[i] }));
+  const { error } = await supabase.from("kv_store_ea915b54").upsert(rows);
+  if (error) throw new Error(error.message);
 };
 
 // Gets multiple key-value pairs from the database.
 export const mget = async (keys: string[]): Promise<any[]> => {
-  const supabase = client()
-  const { data, error } = await supabase.from("kv_store_ea915b54").select("value").in("key", keys);
-  if (error) {
-    throw new Error(error.message);
-  }
-  return data?.map((d) => d.value) ?? [];
+  if (keys.length === 0) return [];
+  const { data, error } = await supabase
+    .from("kv_store_ea915b54")
+    .select("key, value")
+    .in("key", keys);
+  if (error) throw new Error(error.message);
+  // Ensure output preserves the requested order
+  const map = new Map<string, any>((data || []).map(d => [d.key, d.value]));
+  return keys.map(k => map.get(k));
 };
 
 // Deletes multiple key-value pairs from the database.
 export const mdel = async (keys: string[]): Promise<void> => {
-  const supabase = client()
+  if (keys.length === 0) return;
   const { error } = await supabase.from("kv_store_ea915b54").delete().in("key", keys);
-  if (error) {
-    throw new Error(error.message);
-  }
+  if (error) throw new Error(error.message);
 };
 
-// Search for key-value pairs by prefix.
+// Search for key-value pairs by prefix (values only).
 export const getByPrefix = async (prefix: string): Promise<any[]> => {
-  const supabase = client()
-  const { data, error } = await supabase.from("kv_store_ea915b54").select("key, value").like("key", prefix + "%");
-  if (error) {
-    throw new Error(error.message);
-  }
+  const { data, error } = await supabase
+    .from("kv_store_ea915b54")
+    .select("key, value")
+    .like("key", prefix + "%");
+  if (error) throw new Error(error.message);
   return data?.map((d) => d.value) ?? [];
+};
+
+/* ===========================================
+   Extended API (new helpers)
+   =========================================== */
+
+// Returns [{ key, value }] for a given prefix.
+export const getByPrefixWithKeys = async (
+  prefix: string
+): Promise<{ key: string; value: any }[]> => {
+  const { data, error } = await supabase
+    .from("kv_store_ea915b54")
+    .select("key, value")
+    .like("key", prefix + "%");
+  if (error) throw new Error(error.message);
+  return data ?? [];
+};
+
+// Returns just the keys for a given prefix.
+export const keysByPrefix = async (prefix: string): Promise<string[]> => {
+  const { data, error } = await supabase
+    .from("kv_store_ea915b54")
+    .select("key")
+    .like("key", prefix + "%");
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((d) => d.key);
+};
+
+// Returns true if the key exists.
+export const exists = async (key: string): Promise<boolean> => {
+  const { data, error } = await supabase
+    .from("kv_store_ea915b54")
+    .select("key")
+    .eq("key", key)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return !!data;
+};
+
+// Set only if missing (no overwrite).
+export const ensure = async (key: string, value: any): Promise<boolean> => {
+  const present = await exists(key);
+  if (present) return false;
+  await set(key, value);
+  return true;
+};
+
+// Delete everything under a prefix.
+export const delByPrefix = async (prefix: string): Promise<number> => {
+  const { data, error } = await supabase
+    .from("kv_store_ea915b54")
+    .delete()
+    .like("key", prefix + "%")
+    .select("key");
+  if (error) throw new Error(error.message);
+  return (data ?? []).length;
+};
+
+// Read-modify-write helper with your own updater function.
+export const update = async (
+  key: string,
+  updater: (current: any) => any
+): Promise<any> => {
+  const current = await get(key);
+  const next = updater(current);
+  await set(key, next);
+  return next;
+};
+
+// Increment a numeric field inside the JSON by path (e.g., ['leave_balance'])
+export const inc = async (
+  key: string,
+  path: (string | number)[],
+  delta: number
+): Promise<any> => {
+  return await update(key, (current) => {
+    const next = current ? structuredClone(current) : {};
+    let cursor: any = next;
+    for (let i = 0; i < path.length - 1; i++) {
+      const seg = path[i];
+      if (cursor[seg] == null || typeof cursor[seg] !== "object") {
+        cursor[seg] = typeof path[i + 1] === "number" ? [] : {};
+      }
+      cursor = cursor[seg];
+    }
+    const leaf = path[path.length - 1];
+    const prev = Number(cursor?.[leaf] ?? 0);
+    if (Number.isNaN(prev)) {
+      throw new Error("inc: target is not a number");
+    }
+    cursor[leaf] = prev + delta;
+    return next;
+  });
 };

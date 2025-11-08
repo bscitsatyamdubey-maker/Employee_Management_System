@@ -1,4 +1,4 @@
-// src/components/AdminDashboard.tsx
+// src/components/HodDashboard.tsx
 import React, { useState } from 'react';
 import { useAuth } from './AuthContext';
 import { useEmployee } from './EmployeeContext';
@@ -10,38 +10,40 @@ import {
   Users, 
   Calendar, 
   ClipboardList, 
-  Settings, 
   LogOut,
   Clock,
+  AlertCircle,
+  CalendarDays,
+  User as UserIcon,
   CheckCircle,
-  XCircle,
-  AlertCircle
+  XCircle
 } from 'lucide-react';
-import { EmployeeManagement } from './EmployeeManagement';
-import { LeaveRequestManagement } from './LeaveRequestManagement';
-import { HolidayManagement } from './HolidayManagement';
-import { AdminAnalytics } from './AdminAnalytics';
+import { HodLeaveManagement } from './HodLeaveManagement'; // Import new HOD component
+import { LeaveRequestForm } from './LeaveRequestForm';
+import { LeaveHistory } from './LeaveHistory';
+import { EmployeeHolidayCalendar } from './EmployeeHolidayCalendar';
+import { EmployeeProfile } from './EmployeeProfile'; // Import Profile
 
-// Helper function added to display status correctly
+// Helper function to show status badge
 const getStatusBadge = (status: string) => {
   switch (status) {
     case "pending_hod":
       return (
-        <Badge variant="outline" className="text-yellow-600 border-yellow-200">
+        <Badge variant="outline" className="text-orange-600 border-orange-200">
           <Clock className="w-3 h-3 mr-1" />
           Pending HOD
         </Badge>
       )
     case "pending": // Handle stale "pending" status
       return (
-        <Badge variant="outline" className="text-yellow-600 border-yellow-200">
+        <Badge variant="outline" className="text-orange-600 border-orange-200">
           <Clock className="w-3 h-3 mr-1" />
-          Pending (Stale)
+          Pending HOD
         </Badge>
       )
     case "pending_admin":
       return (
-        <Badge variant="outline" className="text-orange-600 border-orange-200">
+        <Badge variant="outline" className="text-blue-600 border-blue-200">
           <Clock className="w-3 h-3 mr-1" />
           Pending Admin
         </Badge>
@@ -65,19 +67,22 @@ const getStatusBadge = (status: string) => {
   }
 }
 
-export const AdminDashboard: React.FC = () => {
+export const HodDashboard: React.FC = () => {
   const { user, signOut } = useAuth();
-  const { employees, leaveRequests, holidays } = useEmployee();
+  const { employees, leaveRequests } = useEmployee();
   const [activeTab, setActiveTab] = useState('overview');
 
-  // *** THIS IS THE FIX ***
-  // Show requests pending ADMIN approval (or old "pending" status)
-  const pendingRequests = leaveRequests.filter(req => req.status === 'pending_admin' || req.status === 'pending');
-  
-  const approvedRequests = leaveRequests.filter(req => req.status === 'approved');
-  const rejectedRequests = leaveRequests.filter(req => req.status === 'rejected');
+  // Filter all data by HOD's department
+  const hodDepartment = user?.department;
+  const departmentEmployees = employees.filter(emp => emp.department === hodDepartment && emp.role === 'employee');
+  const departmentLeaveRequests = leaveRequests.filter(req => req.department === hodDepartment);
 
-  // Get employees currently on leave
+  // *** THIS IS THE FIX ***
+  // HOD's "Pending" tab now shows "pending_hod" AND stale "pending"
+  const pendingRequests = departmentLeaveRequests.filter(req => req.status === 'pending_hod' || req.status === 'pending');
+  const approvedRequests = departmentLeaveRequests.filter(req => req.status === 'approved');
+
+  // Get employees currently on leave *in this department*
   const today = new Date().toISOString().split('T')[0];
   const employeesOnLeave = approvedRequests.filter(req => 
     req.start_date <= today && req.end_date >= today
@@ -94,12 +99,13 @@ export const AdminDashboard: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
                 <Users className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">Admin Dashboard</h1>
-                <p className="text-sm text-gray-500">Employee Management System</p>
+                <h1 className="text-xl font-semibold text-gray-900">HOD Dashboard</h1>
+                {/* Display department from user profile */}
+                <p className="text-sm text-gray-500">{user?.department} Department</p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -120,49 +126,43 @@ export const AdminDashboard: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="overview" className="flex items-center space-x-2">
-              <ClipboardList className="w-4 h-4" />
-              <span>Overview</span>
+            <TabsTrigger value="overview">
+              Overview
             </TabsTrigger>
-            <TabsTrigger value="employees" className="flex items-center space-x-2">
-              <Users className="w-4 h-4" />
-              <span>Employees</span>
+             <TabsTrigger value="profile">
+              My Profile
             </TabsTrigger>
-            <TabsTrigger value="leave-requests" className="flex items-center space-x-2">
-              <Clock className="w-4 h-4" />
-              <span>Leave Requests</span>
+            <TabsTrigger value="leave-requests">
+              Dept. Requests
             </TabsTrigger>
-            <TabsTrigger value="holidays" className="flex items-center space-x-2">
-              <Calendar className="w-4 h-4" />
-              <span>Holidays</span>
+            <TabsTrigger value="request-leave">
+              Request My Leave
             </TabsTrigger>
-            <TabsTrigger value="analytics" className="flex items-center space-x-2">
-              <Settings className="w-4 h-4" />
-              <span>Analytics</span>
+            <TabsTrigger value="leave-history">
+              My Leave History
             </TabsTrigger>
           </TabsList>
 
+          {/* Overview Tab */}
           <TabsContent value="overview">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {/* Total Employees */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-600">Total Employees</p>
-                      <p className="text-3xl font-bold text-gray-900">{employees.length}</p>
+                      <p className="text-sm font-medium text-gray-600">Employees in Dept.</p>
+                      <p className="text-3xl font-bold text-gray-900">{departmentEmployees.length}</p>
                     </div>
                     <Users className="w-8 h-8 text-blue-600" />
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Pending Requests */}
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-600">Pending Admin Approval</p>
+                      <p className="text-sm font-medium text-gray-600">Pending HOD Approval</p>
                       <p className="text-3xl font-bold text-orange-600">{pendingRequests.length}</p>
                     </div>
                     <AlertCircle className="w-8 h-8 text-orange-600" />
@@ -170,58 +170,39 @@ export const AdminDashboard: React.FC = () => {
                 </CardContent>
               </Card>
 
-              {/* On Leave Today */}
               <Card>
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-600">On Leave Today</p>
+                      <p className="text-sm font-medium text-gray-600">On Leave Today (Dept.)</p>
                       <p className="text-3xl font-bold text-green-600">{employeesOnLeave.length}</p>
                     </div>
                     <Calendar className="w-8 h-8 text-green-600" />
                   </div>
                 </CardContent>
               </Card>
-
-              {/* Total Holidays */}
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Total Holidays</p>
-                      <p className="text-3xl font-bold text-purple-600">{holidays.length}</p>
-                    </div>
-                    <Calendar className="w-8 h-8 text-purple-600" />
-                  </div>
-                </CardContent>
-              </Card>
             </div>
 
-            {/* Recent Leave Requests */}
             <Card>
               <CardHeader>
-                <CardTitle>Recent Leave Requests (Pending Admin Approval)</CardTitle>
-                <CardDescription>Latest employee leave requests requiring final approval</CardDescription>
+                <CardTitle>Recent Leave Requests (Pending HOD Approval)</CardTitle>
+                <CardDescription>Latest employee leave requests from your department</CardDescription>
               </CardHeader>
               <CardContent>
                 {pendingRequests.length === 0 ? (
-                  <p className="text-gray-500 text-center py-8">No leave requests pending admin approval</p>
+                  <p className="text-gray-500 text-center py-8">No pending leave requests for your department</p>
                 ) : (
                   <div className="space-y-4">
                     {pendingRequests.slice(0, 5).map((request) => (
                       <div key={request.id} className="flex items-center justify-between p-4 border rounded-lg">
                         <div className="flex-1">
-                          <p className="font-medium text-gray-900">{request.employee_name} ({request.department})</p>
+                          <p className="font-medium text-gray-900">{request.employee_name}</p>
                           <p className="text-sm text-gray-500">
                             {request.leave_type} • {request.start_date} to {request.end_date} ({request.days_requested} days)
                           </p>
                           <p className="text-sm text-gray-600 mt-1">{request.reason}</p>
-                          {/* Only show HOD review if it exists */}
-                          {request.hod_reviewed_by && (
-                            <p className="text-xs text-blue-600 mt-1">Approved by HOD: {request.hod_reviewed_by}</p>
-                          )}
                         </div>
-                        {/* Use the getStatusBadge function here */}
+                        {/* Use the helper function */}
                         {getStatusBadge(request.status)}
                       </div>
                     ))}
@@ -229,46 +210,25 @@ export const AdminDashboard: React.FC = () => {
                 )}
               </CardContent>
             </Card>
-
-            {/* Employees on Leave Today */}
-            {employeesOnLeave.length > 0 && (
-              <Card className="mt-6">
-                <CardHeader>
-                  <CardTitle>Employees on Leave Today</CardTitle>
-                  <CardDescription>Staff members currently on approved leave</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {employeesOnLeave.map((request) => (
-                      <div key={request.id} className="p-4 border rounded-lg bg-green-50 border-green-200">
-                        <p className="font-medium text-gray-900">{request.employee_name}</p>
-                        <p className="text-sm text-gray-600">{request.leave_type}</p>
-                        <p className="text-xs text-gray-500">
-                          {request.start_date} to {request.end_date}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </TabsContent>
 
-          <TabsContent value="employees">
-            <EmployeeManagement />
+          {/* NEW TABS */}
+          <TabsContent value="profile">
+            <EmployeeProfile />
           </TabsContent>
 
           <TabsContent value="leave-requests">
-            <LeaveRequestManagement />
+            <HodLeaveManagement />
           </TabsContent>
 
-          <TabsContent value="holidays">
-            <HolidayManagement />
+          <TabsContent value="request-leave">
+            <LeaveRequestForm />
           </TabsContent>
 
-          <TabsContent value="analytics">
-            <AdminAnalytics />
+          <TabsContent value="leave-history">
+            <LeaveHistory />
           </TabsContent>
+
         </Tabs>
       </main>
     </div>

@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+.env
+.env.local
+.env.*.local
+
+# builds
+dist/
+build/
+.vscode/
+supabase/.temp/
+.DS_Store
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# supabase secrets
+supabase/functions/_shared/
+supabase/.env

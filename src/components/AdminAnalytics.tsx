@@ -1,3 +1,4 @@
+// src/components/AdminAnalytics.tsx
 import React from 'react';
 import { useEmployee } from './EmployeeContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
@@ -20,7 +21,12 @@ export const AdminAnalytics: React.FC = () => {
 
   // Calculate statistics
   const totalEmployees = employees.length;
-  const pendingRequests = leaveRequests.filter(req => req.status === 'pending').length;
+  
+  // *** UPDATED LOGIC ***
+  const pendingHodRequests = leaveRequests.filter(req => req.status === 'pending_hod').length;
+  const pendingAdminRequests = leaveRequests.filter(req => req.status === 'pending_admin').length;
+  const pendingRequests = pendingAdminRequests; // Metric card shows what's pending for Admin
+  
   const approvedRequests = leaveRequests.filter(req => req.status === 'approved').length;
   const rejectedRequests = leaveRequests.filter(req => req.status === 'rejected').length;
 
@@ -43,10 +49,12 @@ export const AdminAnalytics: React.FC = () => {
     value: count
   }));
 
+  // *** UPDATED LOGIC ***
   // Leave status distribution
   const statusData = [
     { name: 'Approved', value: approvedRequests, color: '#10b981' },
-    { name: 'Pending', value: pendingRequests, color: '#f59e0b' },
+    { name: 'Pending HOD', value: pendingHodRequests, color: '#f97316' },
+    { name: 'Pending Admin', value: pendingAdminRequests, color: '#f59e0b' },
     { name: 'Rejected', value: rejectedRequests, color: '#ef4444' }
   ];
 
@@ -85,7 +93,7 @@ export const AdminAnalytics: React.FC = () => {
   }
 
   // Employees with low leave balance
-  const lowBalanceEmployees = employees.filter(emp => emp.leave_balance <= 5);
+  const lowBalanceEmployees = employees.filter(emp => (emp.leave_balance ?? 0) <= 5);
 
   // Upcoming holidays in next 30 days
   const next30Days = new Date();
@@ -118,7 +126,7 @@ export const AdminAnalytics: React.FC = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600">Pending Requests</p>
                 <p className="text-3xl font-bold text-orange-600">{pendingRequests}</p>
-                <p className="text-xs text-gray-500 mt-1">Awaiting approval</p>
+                <p className="text-xs text-gray-500 mt-1">Awaiting admin approval</p>
               </div>
               <Clock className="w-8 h-8 text-orange-600" />
             </div>
@@ -162,7 +170,7 @@ export const AdminAnalytics: React.FC = () => {
         <Card>
           <CardHeader>
             <CardTitle>Leave Request Status</CardTitle>
-            <CardDescription>Distribution of leave request statuses</CardDescription>
+            <CardDescription>Distribution of all leave request statuses</CardDescription>
           </CardHeader>
           <CardContent>
             {statusData.some(item => item.value > 0) ? (

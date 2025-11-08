@@ -1,3 +1,4 @@
+// src/components/EmployeeManagement.tsx
 import React, { useState } from 'react';
 import { useEmployee, Employee } from './EmployeeContext';
 import { Button } from './ui/button';
@@ -10,6 +11,7 @@ import { Badge } from './ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { toast } from 'sonner@2.0.3';
 import { Plus, Edit, Trash2, User, Mail, Calendar, Building } from 'lucide-react';
+import { DEPARTMENTS } from '../constants'; // Import departments
 
 export const EmployeeManagement: React.FC = () => {
   const { employees, loading, addEmployee, updateEmployee, deleteEmployee } = useEmployee();
@@ -20,7 +22,7 @@ export const EmployeeManagement: React.FC = () => {
     name: '',
     email: '',
     department: '',
-    role: 'employee' as 'admin' | 'employee',
+    role: 'employee' as 'admin' | 'employee' | 'hod',
     hire_date: '',
     leave_balance: 20
   });
@@ -39,6 +41,8 @@ export const EmployeeManagement: React.FC = () => {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Note: Admin should preferably use the Register page to create users with auth
+    // This form is a shortcut for creating employee data directly
     const result = await addEmployee(formData);
     if (result.success) {
       toast.success('Employee added successfully');
@@ -81,10 +85,10 @@ export const EmployeeManagement: React.FC = () => {
     setFormData({
       name: employee.name,
       email: employee.email,
-      department: employee.department,
+      department: employee.department || '',
       role: employee.role,
-      hire_date: employee.hire_date,
-      leave_balance: employee.leave_balance
+      hire_date: employee.hire_date || '',
+      leave_balance: employee.leave_balance || 0
     });
     setIsEditDialogOpen(true);
   };
@@ -127,27 +131,27 @@ export const EmployeeManagement: React.FC = () => {
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="department">Department</Label>
-          <div className="relative">
-            <Building className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-            <Input
-              id="department"
-              placeholder="Enter department"
-              value={formData.department}
-              onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-              className="pl-10"
-              required
-            />
-          </div>
+           <Select value={formData.department} onValueChange={(value: string) => setFormData({ ...formData, department: value })}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select department" />
+            </SelectTrigger>
+            <SelectContent>
+              {DEPARTMENTS.map(dept => (
+                <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         
         <div className="space-y-2">
           <Label htmlFor="role">Role</Label>
-          <Select value={formData.role} onValueChange={(value: 'admin' | 'employee') => setFormData({ ...formData, role: value })}>
+          <Select value={formData.role} onValueChange={(value: 'admin' | 'employee' | 'hod') => setFormData({ ...formData, role: value })}>
             <SelectTrigger>
               <SelectValue placeholder="Select role" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="employee">Employee</SelectItem>
+              <SelectItem value="hod">HOD</SelectItem>
               <SelectItem value="admin">Admin</SelectItem>
             </SelectContent>
           </Select>
@@ -223,7 +227,7 @@ export const EmployeeManagement: React.FC = () => {
                 <DialogHeader>
                   <DialogTitle>Add New Employee</DialogTitle>
                   <DialogDescription>
-                    Create a new employee profile with access credentials
+                    Manually create a new employee record. It's recommended to use the Sign Up page to create a user with login credentials.
                   </DialogDescription>
                 </DialogHeader>
                 <EmployeeForm onSubmit={handleAdd} />
@@ -254,7 +258,7 @@ export const EmployeeManagement: React.FC = () => {
                   {employees.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                        No employees found. Add your first employee to get started.
+                        No employees found.
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -262,15 +266,15 @@ export const EmployeeManagement: React.FC = () => {
                       <TableRow key={employee.id}>
                         <TableCell className="font-medium">{employee.name}</TableCell>
                         <TableCell>{employee.email}</TableCell>
-                        <TableCell>{employee.department}</TableCell>
+                        <TableCell>{employee.department || 'N/A'}</TableCell>
                         <TableCell>
-                          <Badge variant={employee.role === 'admin' ? 'default' : 'secondary'}>
+                          <Badge variant={employee.role === 'admin' ? 'default' : (employee.role === 'hod' ? 'secondary' : 'outline')}>
                             {employee.role}
                           </Badge>
                         </TableCell>
                         <TableCell>{employee.hire_date}</TableCell>
                         <TableCell>
-                          <Badge variant={employee.leave_balance <= 5 ? 'destructive' : 'outline'}>
+                          <Badge variant={(employee.leave_balance || 0) <= 5 ? 'destructive' : 'outline'}>
                             {employee.leave_balance} days
                           </Badge>
                         </TableCell>

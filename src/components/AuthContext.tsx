@@ -1,3 +1,4 @@
+// src/components/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase/client';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
@@ -6,8 +7,8 @@ interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'employee';
-  department?: string;
+  role: 'admin' | 'employee' | 'hod'; // Updated role
+  department?: string; // Department is now a key field
   hire_date?: string;
   leave_balance?: number;
 }
@@ -16,9 +17,16 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signUp: (email: string, password: string, name: string, role?: 'admin' | 'employee') => Promise<{ success: boolean; error?: string }>;
+  signUp: (
+    email: string,
+    password: string,
+    name: string,
+    role?: 'admin' | 'employee' | 'hod',
+    department?: string // Add department
+  ) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   updateProfile: (updates: Partial<User>) => Promise<{ success: boolean; error?: string }>;
+  checkUser: () => Promise<void>; // Expose checkUser
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -53,6 +61,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (response.ok) {
           const userData = await response.json();
           setUser(userData);
+        } else {
+          // If profile fetch fails, sign out user
+          await supabase.auth.signOut();
+          setUser(null);
         }
       }
     } catch (error) {
@@ -85,7 +97,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signUp = async (email: string, password: string, name: string, role: 'admin' | 'employee' = 'employee') => {
+  // Updated signUp function
+  const signUp = async (
+    email: string,
+    password: string,
+    name: string,
+    role: 'admin' | 'employee' | 'hod' = 'employee',
+    department?: string
+  ) => {
     try {
       const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-ea915b54/auth/signup`, {
         method: 'POST',
@@ -93,7 +112,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           'Authorization': `Bearer ${publicAnonKey}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ email, password, name, role })
+        body: JSON.stringify({ email, password, name, role, department }) // Pass department
       });
 
       const result = await response.json();
@@ -118,6 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // *** THIS IS THE CORRECTED LINE ***
   const updateProfile = async (updates: Partial<User>) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -154,7 +174,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signIn,
     signUp,
     signOut,
-    updateProfile
+    updateProfile,
+    checkUser // Expose checkUser
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

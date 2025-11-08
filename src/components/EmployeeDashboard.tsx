@@ -1,97 +1,112 @@
-import React, { useState } from 'react';
-import { useAuth } from './AuthContext';
-import { useEmployee } from './EmployeeContext';
-import { Button } from './ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Badge } from './ui/badge';
-import { 
-  User, 
-  Calendar, 
-  Clock, 
+"use client"
+
+// src/components/EmployeeDashboard.tsx
+import type React from "react"
+import { useState } from "react"
+import { useAuth } from "./AuthContext"
+import { useEmployee } from "./EmployeeContext"
+import { Button } from "./ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
+import { Badge } from "./ui/badge"
+import {
+  User,
+  Calendar,
+  Clock,
   LogOut,
   CheckCircle,
   XCircle,
   AlertCircle,
-  CalendarDays
-} from 'lucide-react';
-import { EmployeeProfile } from './EmployeeProfile';
-import { LeaveRequestForm } from './LeaveRequestForm';
-import { LeaveHistory } from './LeaveHistory';
-import { EmployeeHolidayCalendar } from './EmployeeHolidayCalendar';
+  CalendarDays,
+  UserCheck,
+  ClipboardList,
+} from "lucide-react"
+import { EmployeeProfile } from "./EmployeeProfile"
+import { LeaveRequestForm } from "./LeaveRequestForm"
+import { LeaveHistory } from "./LeaveHistory"
+import { EmployeeHolidayCalendar } from "./EmployeeHolidayCalendar"
 
 export const EmployeeDashboard: React.FC = () => {
-  const { user, signOut } = useAuth();
-  const { leaveRequests, holidays } = useEmployee();
-  const [activeTab, setActiveTab] = useState('overview');
+  const { user, signOut } = useAuth()
+  const { leaveRequests, holidays } = useEmployee()
+  const [activeTab, setActiveTab] = useState("overview")
 
-  const userLeaveRequests = leaveRequests.filter(req => req.employee_id === user?.id);
-  const pendingRequests = userLeaveRequests.filter(req => req.status === 'pending');
-  const approvedRequests = userLeaveRequests.filter(req => req.status === 'approved');
-  const rejectedRequests = userLeaveRequests.filter(req => req.status === 'rejected');
+  const userLeaveRequests = leaveRequests.filter((req) => req.employee_id === user?.id)
+  const pendingRequests = userLeaveRequests.filter(
+    (req) => req.status === "pending_hod" || req.status === "pending_admin",
+  )
+  const approvedRequests = userLeaveRequests.filter((req) => req.status === "approved")
+  const rejectedRequests = userLeaveRequests.filter((req) => req.status === "rejected")
 
   // Get current leave status
-  const today = new Date().toISOString().split('T')[0];
-  const currentLeave = approvedRequests.find(req => 
-    req.start_date <= today && req.end_date >= today
-  );
+  const today = new Date().toISOString().split("T")[0]
+  const currentLeave = approvedRequests.find((req) => req.start_date <= today && req.end_date >= today)
 
   // Get upcoming approved leaves
-  const upcomingLeaves = approvedRequests.filter(req => 
-    req.start_date > today
-  ).sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+  const upcomingLeaves = approvedRequests
+    .filter((req) => req.start_date > today)
+    .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
 
   // Get recent activity (last 5 requests)
   const recentActivity = userLeaveRequests
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    .slice(0, 5);
+    .slice(0, 5)
 
   const handleSignOut = async () => {
-    await signOut();
-  };
+    await signOut()
+  }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'pending':
+      case "pending_hod":
+        return (
+          <Badge variant="outline" className="text-yellow-600 border-yellow-200">
+            <Clock className="w-3 h-3 mr-1" />
+            Pending HOD Approval
+          </Badge>
+        )
+      case "pending_admin":
         return (
           <Badge variant="outline" className="text-orange-600 border-orange-200">
-            <Clock className="w-3 h-3 mr-1" />
-            Pending
+            <UserCheck className="w-3 h-3 mr-1" />
+            Pending Admin Approval
           </Badge>
-        );
-      case 'approved':
+        )
+      case "approved":
         return (
           <Badge variant="outline" className="text-green-600 border-green-200">
             <CheckCircle className="w-3 h-3 mr-1" />
             Approved
           </Badge>
-        );
-      case 'rejected':
+        )
+      case "rejected":
         return (
           <Badge variant="outline" className="text-red-600 border-red-200">
             <XCircle className="w-3 h-3 mr-1" />
             Rejected
           </Badge>
-        );
+        )
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return <Badge variant="outline">{status}</Badge>
     }
-  };
+  }
 
   const getLeaveTypeBadge = (type: string) => {
     const colors = {
-      'Sick': 'bg-red-100 text-red-800',
-      'Vacation': 'bg-blue-100 text-blue-800',
-      'Personal': 'bg-purple-100 text-purple-800',
-      'Emergency': 'bg-orange-100 text-orange-800'
-    };
-    
+      Sick: "bg-red-100 text-red-800",
+      Vacation: "bg-blue-100 text-blue-800",
+      Personal: "bg-purple-100 text-purple-800",
+      Emergency: "bg-orange-100 text-orange-800",
+      Paternity: "bg-blue-100 text-blue-800",
+      "leave on compassionate grounds": "bg-red-100 text-red-800",
+    }
+
     return (
-      <Badge variant="outline" className={colors[type as keyof typeof colors] || 'bg-gray-100 text-gray-800'}>
+      <Badge variant="outline" className={colors[type as keyof typeof colors] || "bg-gray-100 text-gray-800"}>
         {type}
       </Badge>
-    );
-  };
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -127,7 +142,7 @@ export const EmployeeDashboard: React.FC = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview" className="flex items-center space-x-2">
-              <CalendarDays className="w-4 h-4" />
+              <ClipboardList className="w-4 h-4" />
               <span>Overview</span>
             </TabsTrigger>
             <TabsTrigger value="profile" className="flex items-center space-x-2">
@@ -135,11 +150,11 @@ export const EmployeeDashboard: React.FC = () => {
               <span>Profile</span>
             </TabsTrigger>
             <TabsTrigger value="request-leave" className="flex items-center space-x-2">
-              <Clock className="w-4 h-4" />
+              <Calendar className="w-4 h-4" />
               <span>Request Leave</span>
             </TabsTrigger>
             <TabsTrigger value="leave-history" className="flex items-center space-x-2">
-              <Calendar className="w-4 h-4" />
+              <Clock className="w-4 h-4" />
               <span>Leave History</span>
             </TabsTrigger>
             <TabsTrigger value="holidays" className="flex items-center space-x-2">
@@ -178,7 +193,7 @@ export const EmployeeDashboard: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600">Leave Balance</p>
-                      <p className="text-3xl font-bold text-blue-600">{user?.leave_balance || 0}</p>
+                      <p className="text-3xl font-bold text-blue-600">{user?.leave_balance ?? 0}</p>
                       <p className="text-xs text-gray-500">days remaining</p>
                     </div>
                     <CalendarDays className="w-8 h-8 text-blue-600" />
@@ -217,9 +232,7 @@ export const EmployeeDashboard: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600">Days Used</p>
-                      <p className="text-3xl font-bold text-gray-900">
-                        {20 - (user?.leave_balance || 0)}
-                      </p>
+                      <p className="text-3xl font-bold text-gray-900">{20 - (user?.leave_balance ?? 20)}</p>
                       <p className="text-xs text-gray-500">out of 20 days</p>
                     </div>
                     <Calendar className="w-8 h-8 text-gray-600" />
@@ -238,7 +251,9 @@ export const EmployeeDashboard: React.FC = () => {
                 <CardContent>
                   <div className="space-y-4">
                     {upcomingLeaves.slice(0, 3).map((leave) => {
-                      const daysUntil = Math.ceil((new Date(leave.start_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                      const daysUntil = Math.ceil(
+                        (new Date(leave.start_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24),
+                      )
                       return (
                         <div key={leave.id} className="p-4 border rounded-lg bg-green-50 border-green-200">
                           <div className="flex items-center justify-between">
@@ -253,12 +268,12 @@ export const EmployeeDashboard: React.FC = () => {
                             </div>
                             <div className="text-right">
                               <p className="text-sm font-medium text-green-700">
-                                {daysUntil === 1 ? 'Tomorrow' : `In ${daysUntil} days`}
+                                {daysUntil === 1 ? "Tomorrow" : `In ${daysUntil} days`}
                               </p>
                             </div>
                           </div>
                         </div>
-                      );
+                      )
                     })}
                   </div>
                 </CardContent>
@@ -303,7 +318,7 @@ export const EmployeeDashboard: React.FC = () => {
             </Card>
 
             {/* Low Balance Warning */}
-            {(user?.leave_balance || 0) <= 5 && (
+            {(user?.leave_balance ?? 20) <= 5 && (
               <Card className="mt-6 bg-orange-50 border-orange-200">
                 <CardContent className="p-6">
                   <div className="flex items-center space-x-3">
@@ -338,5 +353,5 @@ export const EmployeeDashboard: React.FC = () => {
         </Tabs>
       </main>
     </div>
-  );
-};
+  )
+}
